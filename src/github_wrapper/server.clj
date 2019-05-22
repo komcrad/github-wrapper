@@ -13,6 +13,7 @@
 
 (defn followers [username]
   {:status 200
+   :headers {"Content-Type" "application/json"}
    :body (to-json (c/followers username))})
 
 (defroutes app-routes
