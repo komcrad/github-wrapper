@@ -2,6 +2,7 @@
   (:gen-class)
   (:require [org.httpkit.client :as http]
             [clojure.data.json :as json]
+            [clojure.string :as s]
             [clojure.walk :refer [prewalk postwalk keywordize-keys]]))
 
 (defonce token (atom ""))
@@ -23,30 +24,21 @@
   (map #(do {:id (:login %)})
        (keywordize-keys (json/read-str (:body @followers)))))
 
-(defn get-followers-seq [coll]
-  (loop [id (map #(do {:id %}) coll)
-         follows (map parse-followers (map get-followers coll))
-         result []]
-    (if (empty? id)
-      result
-      (recur (rest id) (rest follows)
-             (conj result (assoc (first id) :followers (first follows)))))))
+(defn assoc-follows-async [m]
+  (postwalk #(cond
+               (and (map? %) (nil? (:followers %)))
+               (assoc % :followers (get-followers (:id %)))
+               :else %) m))
 
-(defn followers-of [user]
-  {:id user :followers (parse-followers (get-followers user))})
-
-(defn followers-of-followers [m]
-  (let [followers (map :id (:followers m))
-        async (get-followers-seq followers)]
-    (assoc m :followers async)))
-
-(defn assoc-followers [m]
-  (postwalk #(if (and (not (nil? (:followers %)))
-                      (nil? (:followers (first (:followers %)))))
-               (followers-of-followers %) %) m))
+(defn resolve-async-follows [m]
+  (postwalk #(cond
+               (s/includes? (str (type %)) "org.httpkit.client$deadlock")
+               (parse-followers %)
+               :else %) m))
 
 (defn followers [user]
-  (loop [followers (followers-of user) depth 0]
-    (if (< depth 2)
-      (recur (assoc-followers followers) (inc depth))
-      followers)))
+  (loop [m {:id user} depth 0]
+    (if (= 3 depth)
+      m
+      (let [async (assoc-follows-async m)]
+        (recur (resolve-async-follows async) (inc depth))))))
