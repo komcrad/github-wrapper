@@ -1,32 +1,32 @@
 # github-wrapper
 
-FIXME: description
+A restful api for getting stuff from github api
 
-## Installation
+## Requirements
+[lein](https://leiningen.org): a build tool for Clojure
 
-Download from http://example.com/FIXME.
 
 ## Usage
+To produce a standalone executable jar file:
 
-FIXME: explanation
+    $ lein uberjar
 
-    $ java -jar github-wrapper-0.1.0-standalone.jar [args]
+To run the server you'll need a github api key which will be referred to as $github-key  
+You can either run the jar file with
 
-## Options
+    $ java -jar /path/to/jar.jar
 
-FIXME: listing of options this app accepts.
+or you can just run
 
-## Examples
+    $ lein run $github-key
 
-...
+Once you have it running you can use curl to get github user information
 
-### Bugs
+    $ curl localhost:8080/followers/komcrad
 
-...
+I also have a demo server running the latest version:
 
-### Any Other Sections
-### That You Think
-### Might be Useful
+    $ curl https://hypofluid.com/followers/komcrad
 
 ## License
 
