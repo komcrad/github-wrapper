@@ -28,6 +28,9 @@ I also have a demo server running the latest version:
 
     $ curl https://hypofluid.com/followers/komcrad
 
+## Unit tests
+    $ export GITHUB_API_KEY="$github-key"; lein test
+
 ## License
 
 Copyright © 2019 FIXME
