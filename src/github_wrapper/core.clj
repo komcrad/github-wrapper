@@ -2,6 +2,7 @@
   (:gen-class)
   (:require [org.httpkit.client :as http]
             [clojure.data.json :as json]
+            [clojure.string :as s]
             [clojure.walk :refer [prewalk postwalk keywordize-keys]]))
 
 (defonce token (atom ""))
@@ -12,41 +13,47 @@
   (reset! token (first args)))
 
 (defn authed-get [url]
-  (http/get url {:headers {"Authorization"
-                           (str "token " @token)}}))
+  (if (empty? @token)
+    (throw (Exception. "token not defined"))
+    (http/get url {:headers {"Authorization"
+                             (str "token " @token)}})))
 
-(defn get-followers [user]
+(defn get-followers
+  "Returns a future containing followers of user"
+  [user]
   (authed-get (str "https://api.github.com/users/" user
                     "/followers?per_page=5")))
 
-(defn parse-followers [followers]
+(defn parse-followers
+  "Resolves a future containing futures and returns the information
+   as a map"
+  [followers]
   (map #(do {:id (:login %)})
        (keywordize-keys (json/read-str (:body @followers)))))
 
-(defn get-followers-seq [coll]
-  (loop [id (map #(do {:id %}) coll)
-         follows (map parse-followers (map get-followers coll))
-         result []]
-    (if (empty? id)
-      result
-      (recur (rest id) (rest follows)
-             (conj result (assoc (first id) :followers (first follows)))))))
+(defn assoc-follows-async
+  "Given a map with {:id github-user-name} associates a :followers
+   key. The value of this key will be a future."
+  [m]
+  (postwalk #(cond
+               (and (map? %) (nil? (:followers %)))
+               (assoc % :followers (get-followers (:id %)))
+               :else %) m))
 
-(defn followers-of [user]
-  {:id user :followers (parse-followers (get-followers user))})
+(defn resolve-async-follows
+  "Given a map, resolves all futures into lists of user ids"
+  [m]
+  (postwalk #(cond
+               (s/includes? (str (type %)) "org.httpkit.client$deadlock")
+               (parse-followers %)
+               :else %) m))
 
-(defn followers-of-followers [m]
-  (let [followers (map :id (:followers m))
-        async (get-followers-seq followers)]
-    (assoc m :followers async)))
-
-(defn assoc-followers [m]
-  (postwalk #(if (and (not (nil? (:followers %)))
-                      (nil? (:followers (first (:followers %)))))
-               (followers-of-followers %) %) m))
-
-(defn followers [user]
-  (loop [followers (followers-of user) depth 0]
-    (if (< depth 2)
-      (recur (assoc-followers followers) (inc depth))
-      followers)))
+(defn followers
+  "given a github usernames, returns that users followers and their followers
+   recursivley 3 levels deep. Each level's followers are gathered in parallel"
+  [user]
+  (loop [m {:id user} depth 0]
+    (if (= 3 depth)
+      m
+      (let [async (assoc-follows-async m)]
+        (recur (resolve-async-follows async) (inc depth))))))
